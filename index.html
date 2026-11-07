@@ -181,10 +181,21 @@
 <script>
 (() => {
   // ====== 設定 ======
-  const FRAME_MS = 100, N_FRAMES = 23, CYCLE_MS = FRAME_MS * N_FRAMES;
+  const FRAME_MS = 100, N_FRAMES = 23;
+  // 動畫分三段（第幾格是從1開始數）：
+  //   開頭：第1格 → 迴圈起點前一格（變出槓、舉起來）
+  //   迴圈：連續舉的時候重複這一段
+  //   結尾：迴圈終點後一格 → 第23格（放下、槓消失）
+  // 只舉一下的時候，三段剛好接成完整的23格
+  const LOOP_MODE = 'floor';   // 'floor'＝第7~17格（每下都放回地上）；'air'＝第9~15格（不放到地上）
+  const [LOOP_FIRST, LOOP_LAST] = LOOP_MODE === 'air' ? [9, 15] : [7, 17];
+  const L0 = LOOP_FIRST - 1, L1 = LOOP_LAST - 1;      // 換成從0開始的編號
+  const CYCLE_MS = FRAME_MS * (L1 - L0 + 1);         // 一下的時間，用來換算「總舉重次數」
   const SAFETY_MS = 30 * 60 * 1000;   // 沒收到「結束」時，最多算30分鐘
   // 真實模式：累積「思考分鐘數」達到幾分鐘就升級
-  const LIVE_LEVELS = [0,1,3,6,10,15,22,30,45,60,90,120,180,240,360,480,720,1000,1500,2400];
+  // 前期升得快，後期越來越慢：LV n 需要 10×(n−1)² 分鐘
+  // LV2＝10分鐘、LV5＝約2.7小時、LV10＝13.5小時、LV20＝約60小時、LV30（滿級）＝約140小時
+  const LIVE_LEVELS = Array.from({ length: 30 }, (_, i) => 10 * i * i);
   // 展示模式：點幾下升級
   const DEMO_LEVELS = [0,3,8,15,25,40,60,90,130,180,250,350,500];
 
@@ -210,11 +221,13 @@
 
   // ====== 畫角色 ======
   const canvas = $('buddy'), ctx = canvas.getContext('2d');
-  const sprite = new Image(); sprite.src = 'sprite.png';
-  let frame = 0, playing = false, demoQueue = 0, lastTick = 0, bob = 0;
+  // 角色圖直接內嵌在網頁裡（23格橫排的sprite sheet），不用另外載入檔案
+  const sprite = new Image();
+  sprite.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAXAAAAAQCAYAAAAPmiTRAAADSklEQVR4Xu2bP24UMRTGZ1G6nIGCVEhUW3ARkBKRa0ABCgoCJSIFuUYQW3ARCiokKig4Ax3SoG/CB09ej+3xMzvr8ftJq92d9Wd7/P7Y8ThdZxiGYRiGYRiGYVTCk+NHfW5XNdpSaPqg0RpGCe6UqMQwctEkQWi1+tx+k7nbN9rmoO3bN0pwcf42KxF++fqpRPNqau+/0S6rdm/dKAFWoJd3D7qj680kX/r29Lg/+/Fr6MKD+w+zusIJQKufs//vNx8njZthSLZW4Ais0BDFAtX0dY0fEzCAbVPsxzJMwADXpurJ6c/Pee3/qUCrn7P/2vF3J4AU+4Xi2/R1xa93D/zoerNlY9+1MUzfzvjJBMLgD9lfJoix1ecu/af2/vvY5fhZ+9vscvz/zsaxmdfFXYm3qu/7vl+tVtGV676OH1aAmi0IJsBW7U9y77/28a/d/7X2m1tvDzGVIHnnVkHnz9WX4uWbF1kTkDyBkbJ9QmLbcHMwZ/814y+3YKbAZxDaPfgl+H/NbCWP2EoiFnxL1d9796H7/uzEe/8IIt9KlBoJxg+J+/Tk8RA8UgumjB8TKB7CgZQkJMtwD9u3jTCGtL/b96n99zHl/peg3wf7a/zH9WFpvxT/d204Zv9Q/Ela859mzoHDAUIgqYZ+R/KW+Mq711wN0axaSqNZgWm0xi2aMaT25nA9vHAckp/H3mWZ0mj8v0T8hYjFf63s5RaKb+b2XfMhy8nPY8lUJlWuaMfqAFwxuUkYgXH56qrrDtdBX7g4Xw8ThTwDLc8h30Q8iXpZB4IV4LcU/b8y+3EO29CBLRjWMGUFSn8v4T8a/weIJ038kdz4l2jyz+zQAaQj+K6NIctyVs3Vow3UkaJ324JDyRfqQj3uTC+/w4GYTH16XHP/8w56eS11/Khx60vVczLR6l07Tmnfh+lvj6GViB83KfuSs9b+Wr3W/7XxR3LjP+b/qfnHZ6sS+U/6ks/+/3ULBbNq7E8jH9TIh3yxetwVMc4Gn71+PqxO8Jl6txy/83eeKcY7tNQD/saJhSuH0Kwb6nfsngwjRoktGA2x7cCY/2vjj+TGf6n84yM3/zWPNjGm7G+7pLQpJ6bmjWQsipL+nxN/kpS+LIXfFl3qzTxrpSAAAAAASUVORK5CYII=';
+  let frame = 0, phase = 'idle', demoQueue = 0, lastTick = 0, bob = 0;   // phase：idle / intro / loop / outro
 
   function draw(){
-    if (!sprite.complete) return;
+    if (!sprite.complete || !sprite.naturalWidth) return;   // 圖還沒好就先不畫，避免整個動畫當掉
     ctx.clearRect(0,0,16,16);
     ctx.drawImage(sprite, frame*16, 0, 16, 16, 0, 0, 16, 16);
   }
@@ -237,7 +250,8 @@
     const next = table[lv + 1];
     return { lv, amount, cur: table[lv], next };
   }
-  const isWorking = () => LIVE ? !!S.activeSince : (playing || demoQueue > 0);
+  const isWorking = () => LIVE ? !!S.activeSince : (phase !== 'idle' || demoQueue > 0);
+  const wantsMore = () => LIVE ? !!S.activeSince : demoQueue > 0;
   const fmt = ms => { const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), ss = s%60;
     return h ? `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${m}:${String(ss).padStart(2,'0')}`; };
 
@@ -246,13 +260,13 @@
     work: ['再一下！','這個bug好重','思考就是最好的有氧','不要吵我，我在想','肌肉在長了…','吸氣——吐氣——','今天也沒偷懶','token燃燒中🔥','這組做完再回你'],
     rest: ['休息是訓練的一部分','等你下指令','乳清呢？','喝水了沒','去拉伸一下吧','我準備好了','今天練哪裡？','少喝酒，多思考'],
     demo: ['點我舉一下','你也想練嗎？','戳我戳我','我需要你的鼓勵'],
-    huge: ['……畫面好像有點擠','我是不是太壯了','天花板要撞到了']
+    huge: ['這是我的最終型態','門快要進不去了','我是不是太壯了','Claude健身房榮譽會員']
   };
   let lineIdx = 0, lastMood = '';
   function pickLine(force){
     const { lv } = levelInfo();
     let mood = isWorking() ? 'work' : (LIVE ? 'rest' : 'demo');
-    if (lv >= 12 && Math.random() < .3) mood = 'huge';
+    if (lv >= (LIVE ? LIVE_LEVELS : DEMO_LEVELS).length - 4 && Math.random() < .35) mood = 'huge';
     if (!force && mood === lastMood) { lineIdx++; } else { lineIdx = Math.floor(Math.random()*99); }
     lastMood = mood;
     const arr = LINES[mood]; $('bubble').textContent = arr[lineIdx % arr.length];
@@ -262,14 +276,19 @@
   let lastLevel = null;
   function layout(){
     const { lv } = levelInfo();
-    // 角色高度＝舞台高度的22%，每升一級多9%；LV10左右開始擠爆畫面
+    // 從「小隻」線性長到「滿版但不爆」：最大尺寸會扣掉上方台詞、招牌的空間，也不超過舞台寬度
     // 浮動視窗開著的時候，用小視窗的大小來算
-    const stageH = pip ? pip.document.body.clientHeight : $('stage').clientHeight;
-    const scale = Math.max(4, Math.round(stageH * (0.22 + 0.09 * lv) / 16));  // 取整數倍，像素才不會糊
+    const box = pip ? pip.document.body : $('stage');
+    const stageH = box.clientHeight, stageW = box.clientWidth;
+    const floorPx = stageH * 0.06 + 6;
+    const minPx = stageH * (pip ? 0.30 : 0.22);
+    const maxPx = Math.max(minPx, Math.min(stageH - floorPx - (pip ? 34 : 104), stageW * (pip ? 0.92 : 0.85)));
+    const maxLv = (LIVE ? LIVE_LEVELS : DEMO_LEVELS).length - 1;
+    const want = minPx + (maxPx - minPx) * (lv / maxLv);
+    const scale = Math.max(2, Math.floor(want / 16));   // 取整數倍，像素才不會糊；用無條件捨去，保證不超過上限
     const px = 16 * scale;
     canvas.style.width = canvas.style.height = px + 'px';
-    const floor = stageH * 0.06 + 6;
-    $('bubble').style.bottom = Math.min(floor + px + 14, stageH - 60) + 'px';
+    $('bubble').style.bottom = (floorPx + px + 14) + 'px';
     if (lastLevel !== null && lv > lastLevel) levelUp();
     lastLevel = lv;
   }
@@ -295,7 +314,7 @@
     }
     if (next === undefined){
       $('barFill').style.width = '100%';
-      $('barLabel').textContent = '已達到人類（AI？）極限';
+      $('barLabel').textContent = '滿級！已達到人類（AI？）極限 🏆';
     } else {
       $('barFill').style.width = Math.min(100, (amount - cur) / (next - cur) * 100) + '%';
       $('barLabel').textContent = LIVE
@@ -364,25 +383,31 @@
       win.requestAnimationFrame(step);
     });
   }
+  // 每0.1秒往前走一格
+  function step(){
+    if (phase === 'idle'){
+      if (wantsMore()){ phase = 'intro'; frame = 0; }
+      return;
+    }
+    frame++;
+    if (phase === 'intro' && frame >= L0) phase = 'loop';
+    else if (phase === 'loop' && frame > L1){
+      if (!LIVE){ S.reps++; save(); demoQueue = Math.max(0, demoQueue - 1); }
+      if (wantsMore()) frame = L0;                 // 還要繼續 → 回到迴圈起點
+      else phase = 'outro';                        // 結束 → 放下、槓消失
+    }
+    else if (phase === 'outro' && frame >= N_FRAMES){ phase = 'idle'; frame = 0; }
+  }
   function loop(ts){
     if (ts - lastRender >= 1000 || ts < lastRender){ lastRender = ts; safetyCheck(); render(); }
     if (ts - lastTick >= FRAME_MS || ts < lastTick){
       lastTick = ts;
-      const want = isWorking();
-      if (want && !playing) { playing = true; frame = 0; }
-      if (playing){
-        frame++;
-        if (frame >= N_FRAMES){
-          frame = 0;
-          if (!LIVE){ S.reps++; save(); demoQueue = Math.max(0, demoQueue - 1); }
-          if (!(LIVE ? S.activeSince : demoQueue > 0)) playing = false;
-        }
-      } else {
+      step();
+      if (phase === 'idle'){
         // 休息時輕輕呼吸
         bob = (bob + 1) % 12;
         canvas.style.translate = `0 ${bob < 6 ? 0 : -Math.max(2, parseFloat(canvas.style.width)/16)}px`;
-      }
-      if (playing) canvas.style.translate = '0 0';
+      } else canvas.style.translate = '0 0';
       draw();
     }
   }
@@ -433,7 +458,6 @@
       $('bubble').textContent = cheers[Math.floor(Math.random()*cheers.length)];
     } else {
       demoQueue = Math.min(demoQueue + 1, 5);
-      if (!playing) { playing = true; frame = 0; }
       $('bubble').textContent = ['嘿咻！','好重！','再一下！','呼——'][S.reps % 4];
     }
     render();
