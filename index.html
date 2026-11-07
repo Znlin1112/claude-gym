@@ -251,7 +251,8 @@
     return { lv, amount, cur: table[lv], next };
   }
   const isWorking = () => LIVE ? !!S.activeSince : (phase !== 'idle' || demoQueue > 0);
-  const wantsMore = () => LIVE ? !!S.activeSince : demoQueue > 0;
+  // 動畫要不要繼續舉：Claude在想，或是有人點它（手動加練）
+  const wantsMore = () => (LIVE && !!S.activeSince) || demoQueue > 0;
   const fmt = ms => { const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), ss = s%60;
     return h ? `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${m}:${String(ss).padStart(2,'0')}`; };
 
@@ -392,7 +393,8 @@
     frame++;
     if (phase === 'intro' && frame >= L0) phase = 'loop';
     else if (phase === 'loop' && frame > L1){
-      if (!LIVE){ S.reps++; save(); demoQueue = Math.max(0, demoQueue - 1); }
+      if (!LIVE){ S.reps++; save(); }               // 展示模式：點的次數就是進度
+      demoQueue = Math.max(0, demoQueue - 1);       // 連線模式：手動加練只做動作，不算進等級
       if (wantsMore()) frame = L0;                 // 還要繼續 → 回到迴圈起點
       else phase = 'outro';                        // 結束 → 放下、槓消失
     }
@@ -454,7 +456,8 @@
   // ====== 互動 ======
   function poke(){
     if (LIVE){
-      const cheers = ['謝謝教練！','再來一組！','你也一起練啊','我會更努力思考'];
+      demoQueue = Math.min(demoQueue + 1, 5);
+      const cheers = S.activeSince ? ['謝謝教練！','再來一組！','你也一起練啊','我會更努力思考'] : ['加練一下！','不算分也要練','教練說的算','嘿咻！'];
       $('bubble').textContent = cheers[Math.floor(Math.random()*cheers.length)];
     } else {
       demoQueue = Math.min(demoQueue + 1, 5);
