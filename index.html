@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude健身房</title>
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Noto+Sans+TC:wght@500;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F3EADF; --paper-2:#EADDCD; --ink:#2A2421; --muted:#7A6E66;
+    --orange:#DE7356; --orange-dk:#B9583F; --floor:#38322F; --floor-2:#2C2725;
+    --mat:#4A423E; --chalk:#FFFFFF; --ok:#5E9E6E;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Noto Sans TC",system-ui,sans-serif;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:24px 16px 40px;
+    background-image:radial-gradient(var(--paper-2) 1.2px, transparent 1.2px);
+    background-size:14px 14px;
+  }
+  .wrap{width:100%; max-width:760px}
+  header{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px}
+  h1{margin:0; font-weight:900; font-size:clamp(30px,7vw,52px); line-height:1; letter-spacing:.02em}
+  h1 .en{font-family:"Silkscreen",monospace; font-weight:700; color:var(--orange); letter-spacing:0}
+  .sub{margin:6px 0 0; color:var(--muted); font-size:14px}
+  .pill{
+    display:inline-flex; align-items:center; gap:8px; padding:7px 12px;
+    border:2px solid var(--ink); background:var(--paper); font-weight:900; font-size:14px;
+    box-shadow:3px 3px 0 var(--ink); white-space:nowrap;
+  }
+  .dot{width:10px; height:10px; background:var(--muted)}
+  .pill.working .dot{background:var(--orange); animation:blink .5s steps(1) infinite}
+  .pill.resting .dot{background:var(--ok)}
+  @keyframes blink{50%{opacity:0}}
+
+  .stage{
+    position:relative; height:min(62vh,460px); min-height:300px;
+    border:3px solid var(--ink); box-shadow:6px 6px 0 var(--ink);
+    background:
+      linear-gradient(to bottom, #E4D5C3 0 72%, transparent 72%),
+      repeating-linear-gradient(90deg, var(--floor) 0 48px, var(--floor-2) 48px 96px);
+    overflow:hidden; cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+  }
+  /* 牆上的裝飾 */
+  .wall-sign{
+    position:absolute; top:16px; left:16px; font-family:"Silkscreen",monospace; font-size:12px;
+    color:var(--paper); background:var(--ink); padding:4px 8px; letter-spacing:.05em;
+  }
+  .wall-clock{
+    position:absolute; top:14px; right:16px; font-family:"Silkscreen",monospace; font-size:20px;
+    color:var(--orange-dk); background:var(--paper); border:2px solid var(--ink); padding:2px 8px;
+  }
+  .mat{position:absolute; left:50%; bottom:6%; transform:translateX(-50%); height:10px; width:60%; background:var(--mat); border-top:2px solid #5B524D}
+  #buddy{
+    position:absolute; left:50%; bottom:calc(6% + 6px); transform:translateX(-50%);
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    transition:width .6s cubic-bezier(.3,1.6,.5,1), height .6s cubic-bezier(.3,1.6,.5,1);
+  }
+  .bubble{
+    position:absolute; left:50%; transform:translateX(-50%);
+    background:var(--chalk); border:2px solid var(--ink); padding:8px 12px; font-weight:900; font-size:15px;
+    white-space:nowrap; box-shadow:3px 3px 0 var(--ink); transition:bottom .6s cubic-bezier(.3,1.6,.5,1), opacity .25s;
+    max-width:90%; overflow:hidden; text-overflow:ellipsis; z-index:2;
+  }
+  .bubble::after{
+    content:""; position:absolute; left:50%; bottom:-8px; width:12px; height:12px; background:var(--chalk);
+    border-right:2px solid var(--ink); border-bottom:2px solid var(--ink); transform:translateX(-50%) rotate(45deg);
+  }
+  .levelup{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+    font-family:"Silkscreen",monospace; font-weight:700; font-size:clamp(36px,9vw,72px); color:var(--orange);
+    -webkit-text-stroke:2px var(--ink); opacity:0; z-index:3;
+  }
+  .levelup.show{animation:lvl 1.6s ease-out}
+  @keyframes lvl{0%{opacity:0; transform:scale(.6)} 15%{opacity:1; transform:scale(1.1)} 70%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:translateY(-30px)}}
+  .flash{position:absolute; inset:0; background:var(--chalk); opacity:0; pointer-events:none; z-index:2}
+  .flash.show{animation:fl .5s ease-out}
+  @keyframes fl{0%{opacity:.7}100%{opacity:0}}
+
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:22px}
+  .stat{background:var(--paper); border:2px solid var(--ink); padding:10px 12px}
+  .stat .k{font-size:12px; color:var(--muted); font-weight:500}
+  .stat .v{font-family:"Silkscreen",monospace; font-size:clamp(18px,4.4vw,28px); line-height:1.2; margin-top:2px; white-space:nowrap}
+  .stat .v small{font-family:"Noto Sans TC",sans-serif; font-size:12px; font-weight:900; margin-left:2px}
+  .bar{margin-top:14px; border:2px solid var(--ink); height:18px; background:var(--paper); position:relative}
+  .bar i{position:absolute; left:0; top:0; bottom:0; background:repeating-linear-gradient(-45deg,var(--orange) 0 8px,var(--orange-dk) 8px 16px); transition:width .5s}
+  .bar-label{font-size:13px; color:var(--muted); margin-top:6px}
+
+  .card{
+    margin-top:26px; background:var(--chalk); border:2px solid var(--ink); padding:16px 18px 18px;
+    box-shadow:4px 4px 0 var(--ink);
+  }
+  .card h2{margin:0 0 6px; font-size:18px; font-weight:900}
+  .card p{margin:6px 0; font-size:14px; line-height:1.65}
+  .card code, .cmd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px}
+  .cmd{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--ink); color:var(--paper); padding:10px 12px; margin:8px 0; overflow-x:auto;
+  }
+  .cmd span{white-space:nowrap}
+  .cmd button{
+    flex:none; font:900 12px "Noto Sans TC",sans-serif; background:var(--orange); color:var(--ink);
+    border:0; padding:5px 10px; cursor:pointer;
+  }
+  .pip-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:18px}
+  .pip-btn{
+    font:900 15px "Noto Sans TC",sans-serif; color:var(--ink); background:var(--orange);
+    border:2px solid var(--ink); box-shadow:3px 3px 0 var(--ink); padding:9px 14px; cursor:pointer;
+  }
+  .pip-btn:active{transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink)}
+  .pip-btn:disabled{background:var(--paper-2); color:var(--muted); cursor:not-allowed}
+  .pip-note{font-size:13px; color:var(--muted)}
+  .stage .away{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-weight:900; color:var(--muted); font-size:15px;
+  }
+  .hidden{display:none !important}
+  footer{margin-top:22px; font-size:12px; color:var(--muted); text-align:center}
+  @media (max-width:560px){ .stats{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="en">CLAUDE</span>健身房</h1>
+      <p class="sub" id="sub">你的AI正在變強（物理上）</p>
+    </div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="pillText">休息中</span></div>
+  </header>
+
+  <div class="stage" id="stage" title="點我幫它加油">
+    <div class="wall-sign">NO PAIN NO TOKENS</div>
+    <div class="wall-clock" id="clock">00:00</div>
+    <div class="mat"></div>
+    <canvas id="buddy" width="16" height="16"></canvas>
+    <div class="bubble" id="bubble">…</div>
+    <div class="flash" id="flash"></div>
+    <div class="levelup" id="levelup">LV UP!</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">等級</div><div class="v" id="sLevel">1</div></div>
+    <div class="stat"><div class="k">總舉重次數</div><div class="v" id="sReps">0<small>下</small></div></div>
+    <div class="stat"><div class="k">總訓練時間</div><div class="v" id="sTotal">0:00</div></div>
+    <div class="stat"><div class="k">今日訓練</div><div class="v" id="sToday">0:00</div></div>
+  </div>
+  <div class="bar"><i id="barFill" style="width:0"></i></div>
+  <div class="bar-label" id="barLabel"></div>
+
+  <div class="pip-row">
+    <button class="pip-btn" id="pipBtn">📌 讓它浮出來</button>
+    <span class="pip-note" id="pipNote">開一個永遠在最上層的小視窗，寫程式時它就在角落陪你練</span>
+  </div>
+
+  <!-- 還沒連線：展示模式＋安裝說明 -->
+  <section class="card" id="setupCard">
+    <h2>想讓你的Claude一起練？</h2>
+    <p>現在是展示模式，點畫面就會幫它舉一下。在Claude Code裡輸入下面兩行，裝好之後<b>重開一次Claude Code</b>：</p>
+    <div class="cmd"><span id="cmd1">/plugin marketplace add Znlin1112/claude-gym</span><button data-copy="cmd1">複製</button></div>
+    <div class="cmd"><span id="cmd2">/plugin install gym-buddy@claude-gym</span><button data-copy="cmd2">複製</button></div>
+    <p>接著輸入 <code>/gym-buddy:gym</code>，Claude會給你一個專屬網址。用那個網址打開這頁，以後Claude每想一次，它就練一組；想越久，練越壯。</p>
+    <p style="color:var(--muted);font-size:12px">只會傳「開始」「結束」兩種訊號到這個網頁，不會傳任何程式碼或對話內容。</p>
+  </section>
+
+  <!-- 已連線 -->
+  <section class="card hidden" id="liveCard">
+    <h2 id="liveTitle">連線中…</h2>
+    <p id="liveText">把這頁開在旁邊，然後去叫Claude做事。它一開始思考，這裡就會開始練。</p>
+  </section>
+
+  <footer>Merry Christmas 🎄 少喝酒，多思考</footer>
+</div>
+
+<script>
+(() => {
+  // ====== 設定 ======
+  const FRAME_MS = 100, N_FRAMES = 23, CYCLE_MS = FRAME_MS * N_FRAMES;
+  const SAFETY_MS = 30 * 60 * 1000;   // 沒收到「結束」時，最多算30分鐘
+  // 真實模式：累積「思考分鐘數」達到幾分鐘就升級
+  const LIVE_LEVELS = [0,1,3,6,10,15,22,30,45,60,90,120,180,240,360,480,720,1000,1500,2400];
+  // 展示模式：點幾下升級
+  const DEMO_LEVELS = [0,3,8,15,25,40,60,90,130,180,250,350,500];
+
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const store = {
+    get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+    set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  };
+
+  // 頻道名稱：網址上的 ?t= 優先，沒有的話用上次存的
+  let topic = params.get('t');
+  if (topic && /^[a-z0-9-]{8,64}$/.test(topic)) store.set('gym-topic', topic);
+  else topic = store.get('gym-topic', null);
+  const LIVE = !!topic;
+
+  // ====== 狀態 ======
+  const S = LIVE
+    ? store.get('gym-live-' + topic, { totalMs:0, activeSince:null, lastId:null, days:{} })
+    : store.get('gym-demo', { reps:0 });
+  const save = () => store.set(LIVE ? 'gym-live-' + topic : 'gym-demo', S);
+  const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; };
+
+  // ====== 畫角色 ======
+  const canvas = $('buddy'), ctx = canvas.getContext('2d');
+  const sprite = new Image(); sprite.src = 'sprite.png';
+  let frame = 0, playing = false, demoQueue = 0, lastTick = 0, bob = 0;
+
+  function draw(){
+    if (!sprite.complete) return;
+    ctx.clearRect(0,0,16,16);
+    ctx.drawImage(sprite, frame*16, 0, 16, 16, 0, 0, 16, 16);
+  }
+
+  // ====== 計算 ======
+  function liveTotalMs(now = Date.now()){
+    let t = S.totalMs;
+    if (S.activeSince) t += Math.min(now - S.activeSince, SAFETY_MS);
+    return t;
+  }
+  function todayMs(now = Date.now()){
+    let t = S.days[dayKey(now)] || 0;
+    if (S.activeSince) t += Math.min(now - Math.max(S.activeSince, new Date().setHours(0,0,0,0)), SAFETY_MS);
+    return Math.max(0, t);
+  }
+  function levelInfo(){
+    const table = LIVE ? LIVE_LEVELS : DEMO_LEVELS;
+    const amount = LIVE ? liveTotalMs() / 60000 : S.reps;
+    let lv = 0; while (lv + 1 < table.length && amount >= table[lv + 1]) lv++;
+    const next = table[lv + 1];
+    return { lv, amount, cur: table[lv], next };
+  }
+  const isWorking = () => LIVE ? !!S.activeSince : (playing || demoQueue > 0);
+  const fmt = ms => { const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), ss = s%60;
+    return h ? `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${m}:${String(ss).padStart(2,'0')}`; };
+
+  // ====== 台詞 ======
+  const LINES = {
+    work: ['再一下！','這個bug好重','思考就是最好的有氧','不要吵我，我在想','肌肉在長了…','吸氣——吐氣——','今天也沒偷懶','token燃燒中🔥','這組做完再回你'],
+    rest: ['休息是訓練的一部分','等你下指令','乳清呢？','喝水了沒','去拉伸一下吧','我準備好了','今天練哪裡？','少喝酒，多思考'],
+    demo: ['點我舉一下','你也想練嗎？','戳我戳我','我需要你的鼓勵'],
+    huge: ['……畫面好像有點擠','我是不是太壯了','天花板要撞到了']
+  };
+  let lineIdx = 0, lastMood = '';
+  function pickLine(force){
+    const { lv } = levelInfo();
+    let mood = isWorking() ? 'work' : (LIVE ? 'rest' : 'demo');
+    if (lv >= 12 && Math.random() < .3) mood = 'huge';
+    if (!force && mood === lastMood) { lineIdx++; } else { lineIdx = Math.floor(Math.random()*99); }
+    lastMood = mood;
+    const arr = LINES[mood]; $('bubble').textContent = arr[lineIdx % arr.length];
+  }
+
+  // ====== 版面 ======
+  let lastLevel = null;
+  function layout(){
+    const { lv } = levelInfo();
+    // 角色高度＝舞台高度的22%，每升一級多9%；LV10左右開始擠爆畫面
+    // 浮動視窗開著的時候，用小視窗的大小來算
+    const stageH = pip ? pip.document.body.clientHeight : $('stage').clientHeight;
+    const scale = Math.max(4, Math.round(stageH * (0.22 + 0.09 * lv) / 16));  // 取整數倍，像素才不會糊
+    const px = 16 * scale;
+    canvas.style.width = canvas.style.height = px + 'px';
+    const floor = stageH * 0.06 + 6;
+    $('bubble').style.bottom = Math.min(floor + px + 14, stageH - 60) + 'px';
+    if (lastLevel !== null && lv > lastLevel) levelUp();
+    lastLevel = lv;
+  }
+  function levelUp(){
+    for (const id of ['levelup','flash']) { const el = $(id); el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
+    $('bubble').textContent = '肌肉成長了！💪';
+  }
+
+  function render(){
+    const { lv, amount, cur, next } = levelInfo();
+    $('sLevel').textContent = lv + 1;
+    if (LIVE){
+      const total = liveTotalMs();
+      $('sReps').innerHTML = Math.floor(total / CYCLE_MS) + '<small>下</small>';
+      $('sTotal').textContent = fmt(total);
+      $('sToday').textContent = fmt(todayMs());
+      $('clock').textContent = S.activeSince ? fmt(Date.now() - S.activeSince) : '00:00';
+    } else {
+      $('sReps').innerHTML = S.reps + '<small>下</small>';
+      $('sTotal').textContent = fmt(S.reps * CYCLE_MS);
+      $('sToday').textContent = '展示';
+      $('clock').textContent = 'DEMO';
+    }
+    if (next === undefined){
+      $('barFill').style.width = '100%';
+      $('barLabel').textContent = '已達到人類（AI？）極限';
+    } else {
+      $('barFill').style.width = Math.min(100, (amount - cur) / (next - cur) * 100) + '%';
+      $('barLabel').textContent = LIVE
+        ? `再思考 ${Math.max(1, Math.ceil(next - amount))} 分鐘升到 LV ${lv + 2}`
+        : `再舉 ${next - amount} 下升到 LV ${lv + 2}`;
+    }
+    const w = isWorking();
+    $('pill').className = 'pill ' + (w ? 'working' : 'resting');
+    $('pillText').textContent = w ? '訓練中' : '休息中';
+    if (pip){
+      const lb = pip.document.getElementById('lb');
+      lb.className = 'lb' + (w ? ' working' : '');
+      lb.textContent = `LV ${lv + 1}・` + (w ? (LIVE ? '訓練中 ' + $('clock').textContent : '訓練中') : '休息中');
+    }
+    layout();
+  }
+
+  // ====== 浮動小視窗（Document Picture-in-Picture，目前Chrome / Edge支援） ======
+  let pip = null, loopGen = 0;
+  const PIP_CSS = `
+    html,body{margin:0;height:100%;overflow:hidden;cursor:pointer;user-select:none}
+    body{background:
+      linear-gradient(to bottom,#E4D5C3 0 80%,transparent 80%),
+      repeating-linear-gradient(90deg,#38322F 0 24px,#2C2725 24px 48px)}
+    canvas{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);
+      image-rendering:pixelated;image-rendering:crisp-edges;
+      transition:width .6s cubic-bezier(.3,1.6,.5,1),height .6s cubic-bezier(.3,1.6,.5,1)}
+    .lb{position:absolute;top:6px;left:6px;font:900 12px "Noto Sans TC",system-ui,sans-serif;
+      background:#2A2421;color:#F3EADF;padding:3px 7px;z-index:2;white-space:nowrap}
+    .lb.working{background:#DE7356;color:#2A2421}`;
+
+  async function openPip(){
+    if (pip) { pip.close(); return; }
+    try {
+      pip = await documentPictureInPicture.requestWindow({ width: 220, height: 240 });
+    } catch(e) { pip = null; $('pipNote').textContent = '開不起來，可能被瀏覽器擋住了，再按一次試試'; return; }
+    const d = pip.document;
+    d.title = 'Claude健身房';
+    const st = d.createElement('style'); st.textContent = PIP_CSS; d.head.append(st);
+    const lb = d.createElement('div'); lb.id = 'lb'; lb.className = 'lb'; d.body.append(lb);
+    d.body.append(canvas);                          // 把角色本人搬過去
+    d.body.addEventListener('click', poke);
+    $('stage').insertAdjacentHTML('beforeend', '<div class="away" id="away">它去角落練了 👉</div>');
+    $('bubble').classList.add('hidden');
+    $('pipBtn').textContent = '📌 叫它回來';
+    pip.addEventListener('pagehide', () => {
+      pip = null;
+      $('stage').insertBefore(canvas, $('bubble'));
+      $('away')?.remove(); $('bubble').classList.remove('hidden');
+      $('pipBtn').textContent = '📌 讓它浮出來';
+      startLoop(); render();
+    });
+    pip.addEventListener('resize', layout);
+    startLoop(); render();
+  }
+
+  // ====== 動畫迴圈 ======
+  // 動畫跟著「看得到的那個視窗」跑：主分頁被切走時，瀏覽器會暫停它的動畫，但浮動視窗還看得到
+  let lastRender = 0;
+  function startLoop(){
+    const gen = ++loopGen;
+    const win = pip || window;
+    win.requestAnimationFrame(function step(ts){
+      if (gen !== loopGen) return;               // 已經換到別的視窗跑了
+      loop(ts);
+      win.requestAnimationFrame(step);
+    });
+  }
+  function loop(ts){
+    if (ts - lastRender >= 1000 || ts < lastRender){ lastRender = ts; safetyCheck(); render(); }
+    if (ts - lastTick >= FRAME_MS || ts < lastTick){
+      lastTick = ts;
+      const want = isWorking();
+      if (want && !playing) { playing = true; frame = 0; }
+      if (playing){
+        frame++;
+        if (frame >= N_FRAMES){
+          frame = 0;
+          if (!LIVE){ S.reps++; save(); demoQueue = Math.max(0, demoQueue - 1); }
+          if (!(LIVE ? S.activeSince : demoQueue > 0)) playing = false;
+        }
+      } else {
+        // 休息時輕輕呼吸
+        bob = (bob + 1) % 12;
+        canvas.style.translate = `0 ${bob < 6 ? 0 : -Math.max(2, parseFloat(canvas.style.width)/16)}px`;
+      }
+      if (playing) canvas.style.translate = '0 0';
+      draw();
+    }
+  }
+
+  // ====== 訊號處理（用訊息的時間，所以補收舊訊息也算得對） ======
+  function handleSignal(kind, tMs){
+    if (kind === 'start'){
+      if (!S.activeSince) S.activeSince = tMs;
+    } else if (kind === 'stop'){
+      if (S.activeSince){
+        const dur = Math.max(0, Math.min(tMs - S.activeSince, SAFETY_MS));
+        S.totalMs += dur;
+        const k = dayKey(tMs); S.days[k] = (S.days[k] || 0) + dur;
+        S.activeSince = null;
+      }
+    }
+    save(); pickLine(true); render();
+  }
+  function safetyCheck(){
+    if (LIVE && S.activeSince && Date.now() - S.activeSince > SAFETY_MS) handleSignal('stop', S.activeSince + SAFETY_MS);
+  }
+
+  function connect(){
+    $('setupCard').classList.add('hidden');
+    $('liveCard').classList.remove('hidden');
+    $('sub').textContent = 'Claude一思考，它就開始練';
+    let url = `https://ntfy.sh/${encodeURIComponent(topic)}/sse`;
+    if (S.lastId) url += `?since=${encodeURIComponent(S.lastId)}`;
+    let es;
+    try { es = new EventSource(url); } catch(e){ return; }
+    es.onopen = () => { $('liveTitle').textContent = '已連上你的Claude ✅'; };
+    es.onerror = () => { $('liveTitle').textContent = '重新連線中…'; };
+    es.addEventListener('message', e => {
+      let m; try { m = JSON.parse(e.data); } catch(_) { return; }
+      if (m.event && m.event !== 'message') return;
+      if (m.id === S.lastId) return;
+      S.lastId = m.id;
+      const msg = String(m.message || '').trim();
+      if (msg === 'start' || msg === 'stop') handleSignal(msg, (m.time || Date.now()/1000) * 1000);
+      else save();
+    });
+  }
+
+  // ====== 互動 ======
+  function poke(){
+    if (LIVE){
+      const cheers = ['謝謝教練！','再來一組！','你也一起練啊','我會更努力思考'];
+      $('bubble').textContent = cheers[Math.floor(Math.random()*cheers.length)];
+    } else {
+      demoQueue = Math.min(demoQueue + 1, 5);
+      if (!playing) { playing = true; frame = 0; }
+      $('bubble').textContent = ['嘿咻！','好重！','再一下！','呼——'][S.reps % 4];
+    }
+    render();
+  }
+  $('stage').addEventListener('click', poke);
+  if ('documentPictureInPicture' in window) $('pipBtn').addEventListener('click', openPip);
+  else { $('pipBtn').disabled = true; $('pipNote').textContent = '這個瀏覽器還不支援浮動視窗，用Chrome打開就可以'; }
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($(b.dataset.copy).textContent); b.textContent = '已複製'; }
+    catch(e){ b.textContent = '請手動複製'; }
+    setTimeout(() => b.textContent = '複製', 1500);
+  }));
+  addEventListener('resize', layout);
+
+  // 給測試用
+  window.__gym = { signal: handleSignal, state: S, openPip };
+
+  // ====== 開始 ======
+  sprite.onload = draw;
+  if (LIVE) connect();
+  safetyCheck();
+  pickLine(true); render();
+  lastLevel = levelInfo().lv;
+  startLoop();
+  setInterval(() => { safetyCheck(); render(); }, 1000);
+  setInterval(() => pickLine(false), 4500);
+})();
+</script>
+</body>
+</html>

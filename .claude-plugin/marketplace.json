@@ -1,0 +1,11 @@
+{
+  "name": "claude-gym",
+  "owner": { "name": "Znlin1112" },
+  "plugins": [
+    {
+      "name": "gym-buddy",
+      "source": "./plugins/gym-buddy",
+      "description": "Claude一思考，健身房裡的小傢伙就開始舉重。"
+    }
+  ]
+}
